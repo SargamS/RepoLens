@@ -1,0 +1,13 @@
+{
+  "name": "repolens",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=repolens-backend\" \"npm run dev --workspace=repolens-frontend\"",
+    "build": "npm run build --workspace=repolens-frontend",
+    "start": "concurrently \"npm run start --workspace=repolens-backend\" \"npm run start --workspace=repolens-frontend\"",
+    "typecheck": "npm run typecheck --workspace=repolens-frontend"
+  },
+  "devDependencies": { "concurrently": "^9.1.2" }
+}
