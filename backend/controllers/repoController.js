@@ -55,6 +55,10 @@ async function analyzeRepo(req, res) {
     let repo;
     try {
       ({ owner, repo } = github.parseRepoIdentifier(github_url));
+      console.log("GitHub URL:", github_url);
+      console.log("Owner:", owner);
+      console.log("Repo:", repo);
+      
     } catch (err) {
       return res.status(400).json({ error: err.message });
     }
