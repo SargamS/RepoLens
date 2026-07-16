@@ -83,7 +83,11 @@ async function me(req, res) {
 }
 
 function logout(req, res) {
-  res.clearCookie('token', COOKIE_OPTIONS);
+  // clearCookie only needs the matching attributes used to set the cookie
+  // (path/domain/sameSite/secure) — passing maxAge here is deprecated in
+  // Express and has no effect on clearing.
+  const { maxAge, ...clearOptions } = COOKIE_OPTIONS;
+  res.clearCookie('token', clearOptions);
   return res.json({ success: true });
 }
 
