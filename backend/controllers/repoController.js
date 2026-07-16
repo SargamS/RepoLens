@@ -74,7 +74,18 @@ async function analyzeRepo(req, res) {
       default_branch: repoInfo.default_branch,
     });
 
+    const existingPrs = await queries.getPullRequestsForRepo(dbRepo.id);
+    const existingByNumber = new Map(existingPrs.map((pr) => [pr.pr_number, pr]));
+
     const analyzed = await mapWithConcurrency(prsToAnalyze, CONCURRENCY_LIMIT, async (pr) => {
+      const existing = existingByNumber.get(pr.number);
+      // Already analyzed and the PR hasn't changed since (same title/state) —
+      // reuse the stored analysis instead of burning Gemini quota re-summarizing
+      // a diff we've already summarized.
+      if (existing && existing.title === pr.title && existing.state === pr.state) {
+        return existing;
+      }
+
       try {
         const diff = await github.getPullRequestDiff(owner, repo, pr.number, req.githubToken);
         const truncatedDiff = diff.slice(0, DIFF_TRUNCATE_CHARS);
