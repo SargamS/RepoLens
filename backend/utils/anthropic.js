@@ -3,7 +3,7 @@
 // instead of the Anthropic API. Uses plain fetch (Node 18+ has it built in),
 // so no new npm dependency is required.
 
-const GEMINI_MODEL = 'gemini-2.5-flash-lite';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const PR_SUMMARIZER_SYSTEM_PROMPT = `You are a senior software engineer reviewing a GitHub pull request. You will be given the PR title, author, file change stats, and the raw diff. Your job is to produce a concise, structured analysis.
@@ -64,7 +64,19 @@ class GeminiApiError extends Error {
  * Low-level call to Gemini's generateContent endpoint.
  * `contents` follows Gemini's { role: 'user' | 'model', parts: [{text}] } shape.
  */
-async function callGemini({ systemPrompt, contents }) {
+const MAX_RETRIES = 3;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Gemini's 429 error message embeds a suggested delay, e.g. "Please retry in 21.4s".
+function parseRetryDelayMs(message) {
+  const match = /retry in ([\d.]+)s/i.exec(message || '');
+  return match ? Math.ceil(parseFloat(match[1]) * 1000) : null;
+}
+
+async function rawCallGemini({ systemPrompt, contents }, attempt = 0) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new GeminiApiError('GEMINI_API_KEY is not set', 500);
@@ -91,6 +103,15 @@ async function callGemini({ systemPrompt, contents }) {
 
   if (!res.ok) {
     const message = (data.error && data.error.message) || `Gemini API request failed: ${res.status}`;
+
+    // Back off and retry on rate limiting / transient server errors.
+    if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
+      const suggested = parseRetryDelayMs(message);
+      const delay = suggested !== null ? suggested : 500 * 2 ** attempt;
+      await sleep(delay);
+      return rawCallGemini({ systemPrompt, contents }, attempt + 1);
+    }
+
     throw new GeminiApiError(message, res.status);
   }
 
@@ -100,6 +121,30 @@ async function callGemini({ systemPrompt, contents }) {
     .filter((p) => typeof p.text === 'string')
     .map((p) => p.text)
     .join('');
+}
+
+// Free-tier Gemini Flash allows ~10 requests/minute PROJECT-WIDE — shared by
+// PR-summary calls and chat calls alike. Without pacing, a batch of PR
+// summaries burns the whole minute's quota in seconds and any chat request
+// that lands afterward gets an immediate 429 with nothing left to retry into.
+// This serializes every call (summaries + chat) through one queue with a
+// minimum spacing between dispatches, so chat always gets its turn instead
+// of being starved by a PR-analysis burst.
+const MIN_CALL_INTERVAL_MS = 6500; // ~9/min, a safety margin under the 10 RPM cap
+let geminiQueue = Promise.resolve();
+let lastDispatchTime = 0;
+
+function callGemini(args) {
+  const runNext = geminiQueue.then(async () => {
+    const waitMs = Math.max(0, lastDispatchTime + MIN_CALL_INTERVAL_MS - Date.now());
+    if (waitMs > 0) await sleep(waitMs);
+    lastDispatchTime = Date.now();
+    return rawCallGemini(args);
+  });
+  // Keep the queue chain alive even if this call throws, so later calls
+  // still get their turn instead of the whole queue dying.
+  geminiQueue = runNext.catch(() => {});
+  return runNext;
 }
 
 /**
