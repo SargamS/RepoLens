@@ -3,7 +3,7 @@
 // instead of the Anthropic API. Uses plain fetch (Node 18+ has it built in),
 // so no new npm dependency is required.
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash-lite';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const PR_SUMMARIZER_SYSTEM_PROMPT = `You are a senior software engineer reviewing a GitHub pull request. You will be given the PR title, author, file change stats, and the raw diff. Your job is to produce a concise, structured analysis.
