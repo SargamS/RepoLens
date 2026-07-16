@@ -6,7 +6,7 @@ const MAX_PRS_TO_ANALYZE = 15;
 const DIFF_TRUNCATE_CHARS = 8000;
 const FILE_TRUNCATE_CHARS = 4000;
 const CHAT_HISTORY_LIMIT = 6;
-const CONCURRENCY_LIMIT = 3;
+const CONCURRENCY_LIMIT = 2;
 
 /** Runs async tasks with a max concurrency to avoid hammering rate limits. */
 async function mapWithConcurrency(items, limit, fn) {
