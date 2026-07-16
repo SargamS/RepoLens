@@ -32,6 +32,11 @@ const app = express();
 // express-rate-limit can't reliably identify clients by IP.
 app.set('trust proxy', 1);
 
+// Serves static files placed in backend/public at the root path — used for
+// things like Google Search Console's HTML site-verification file, which
+// must be reachable at https://<your-domain>/<filename>.html
+app.use(express.static('public'));
+
 // Trim any trailing slash so a mistyped env var (e.g. "http://localhost:3000/")
 // doesn't silently fail exact-match CORS/redirect comparisons.
 const FRONTEND_URL = process.env.FRONTEND_URL.replace(/\/$/, '');
